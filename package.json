@@ -1,0 +1,25 @@
+{
+  "name": "telebot",
+  "version": "1.0.0",
+  "description": "Play or F-droid link fetcher",
+  "homepage": "https://github.com/Musician7777/telebot#readme",
+  "bugs": {
+    "url": "https://github.com/Musician7777/telebot/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Musician7777/telebot.git"
+  },
+  "license": "ISC",
+  "author": "MR-Musician",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "nodemon": "^3.1.11"
+  }
+}
