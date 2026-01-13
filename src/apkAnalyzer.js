@@ -1,4 +1,5 @@
 import axios from "axios";
+import counterManager from "./counter.js";
 import ApkReader from "adbkit-apkreader";
 import { createWriteStream } from "fs";
 import { mkdtemp, rm, writeFile } from "fs/promises";
@@ -82,12 +83,30 @@ const registerApkAnalyzer = (bot, resultChannelId, mtprotoClient) => {
 
       const storeLinks = await linkExtractor(packageName);
 
-      await safeSendMessage(
+      // Send result to RESULT CHANNEL
+      const resultMsg = await safeSendMessage(
         bot,
         resultChannelId,
         buildSuccessMessage(msg, fileInfo, packageName, appName, storeLinks)
       );
-    } catch (error) {
+
+      // If result was sent successfully, reply to SOURCE CHANNEL
+      if (resultMsg) {
+        // 1. Get sequential number
+        const appNumber = await counterManager.getNextCounter();
+
+        // 2. Generate link to result message
+        const resultLink = getMessageLink(resultMsg);
+
+        // 3. Reply to original upload
+        const replyText = `<b>#${appNumber}</b>\n\n📊 <a href="${resultLink}">Check Analysis Request</a>`;
+
+        await safeSendMessage(bot, msg.chat.id, replyText, {
+          reply_to_message_id: msg.message_id
+        });
+      }
+
+      // console.log("✅ Message sent successfully!"); // Removed log
       console.error("❌ Analyzer error:", error.message);
       await safeSendMessage(
         bot,
@@ -285,14 +304,16 @@ const escapeHtml = (input) => {
     .replace(/'/g, "&#39;");
 };
 
-const safeSendMessage = async (bot, chatId, text) => {
+const safeSendMessage = async (bot, chatId, text, options = {}) => {
   try {
-    await bot.sendMessage(chatId, text, {
+    return await bot.sendMessage(chatId, text, {
       parse_mode: "HTML",
       disable_web_page_preview: false,
+      ...options
     });
   } catch (error) {
     console.error("Failed to send Telegram message:", error.message);
+    return null;
   }
 };
 
