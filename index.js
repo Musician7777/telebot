@@ -9,6 +9,19 @@ const token = process.env.BOT_TOKEN;
 const resultChannelId = process.env.RESULT_CHANNEL_ID;
 const apiId = process.env.API_ID;
 const apiHash = process.env.API_HASH;
+import http from 'http';
+
+// Simple health check server
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Bot is alive!');
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Health check server running on port ${PORT}`);
+});
+
 
 if (!token) {
   console.error('BOT_TOKEN is not set in the environment.');
