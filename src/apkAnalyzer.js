@@ -99,7 +99,7 @@ const registerApkAnalyzer = (bot, resultChannelId, mtprotoClient) => {
         const resultLink = getMessageLink(resultMsg);
 
         // 3. Reply to original upload
-        const replyText = `<b>#${appNumber}</b>\n\n📊 <a href="${resultLink}">Check Analysis Request</a>`;
+        const replyText = `<b>#${appNumber}</b>\t==><a href="${resultLink}">Check Analysis Request</a>`;
 
         await safeSendMessage(bot, msg.chat.id, replyText, {
           reply_to_message_id: msg.message_id
