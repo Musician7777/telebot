@@ -1,5 +1,4 @@
 import axios from "axios";
-import counterManager from "./counter.js";
 import ApkReader from "adbkit-apkreader";
 import { createWriteStream } from "fs";
 import { mkdtemp, rm, writeFile } from "fs/promises";
@@ -8,6 +7,7 @@ import { join } from "path";
 import { pipeline } from "stream/promises";
 import fileGetter from "./fileGetter.js";
 import linkExtractor from "./linkExtractor.js";
+import { addToSheet } from "./sheetClient.js";
 
 const DOWNLOAD_TIMEOUT = 4 * 60 * 1000;
 
@@ -41,78 +41,89 @@ const registerApkAnalyzer = (bot, resultChannelId, mtprotoClient) => {
     let fileInfo = null;
 
     try {
-      // 3. Send "Analyzing APK..." message checking pass
-      // We send this BEFORE downloading so the user sees immediate feedback
-      analyzingMsg = await bot.sendMessage(msg.chat.id, "⏳ <b>Analyzing APK...</b>", {
-        parse_mode: "HTML",
-        disable_web_page_preview: true,
-      });
+      try {
+        // 3. Send "Analyzing APK..." message checking pass
+        // We send this BEFORE downloading so the user sees immediate feedback
+        analyzingMsg = await bot.sendMessage(msg.chat.id, "⏳ <b>Analyzing APK...</b>", {
+          parse_mode: "HTML",
+          disable_web_page_preview: true,
+        });
 
-      // 4. Download/Get File Info
-      // This might take time for large files (MTProto download)
-      fileInfo = await fileGetter(bot, msg, mtprotoClient);
+        // 4. Download/Get File Info
+        // This might take time for large files (MTProto download)
+        fileInfo = await fileGetter(bot, msg, mtprotoClient);
 
-      if (!fileInfo) {
-        // Should catch cases where fileGetter rejects it for some reason
-        await safeSendTemporaryMessage(
+        if (!fileInfo) {
+          // Should catch cases where fileGetter rejects it for some reason
+          await safeSendTemporaryMessage(
+            bot,
+            msg.chat.id,
+            "❌ <b>Not an app (apk, apks)</b>",
+            3000
+          );
+          return;
+        }
+
+        if (/\.apks$/i.test(fileInfo.fileName)) {
+          await safeSendMessage(
+            bot,
+            resultChannelId,
+            buildUnsupportedBundleMessage(msg, fileInfo)
+          );
+          return;
+        }
+
+        const analysis = await analyzeApk(fileInfo);
+        const packageName = analysis.packageName;
+        const appName = analysis.appName;
+
+        if (!packageName) {
+          await safeSendMessage(bot, resultChannelId, buildErrorMessage(msg, "Package name missing in APK manifest."));
+          return;
+        }
+
+        const storeLinks = await linkExtractor(packageName);
+
+        // Add to Google Sheets Backup
+        const googlePlayLink = storeLinks.find(l => l.label.toLowerCase().includes('play store'))?.url;
+        const fDroidLink = storeLinks.find(l => l.label.toLowerCase().includes('f-droid'))?.url;
+
+        await addToSheet({
+          fileName: fileInfo.fileName,
+          packageName: packageName,
+          googlePlayLink,
+          fDroidLink,
+          fileSize: formatBytes(fileInfo.fileSize)
+        });
+
+        // Send result to RESULT CHANNEL
+        const resultMsg = await safeSendMessage(
           bot,
-          msg.chat.id,
-          "❌ <b>Not an app (apk, apks)</b>",
-          3000
+          resultChannelId,
+          buildSuccessMessage(msg, fileInfo, packageName, appName, storeLinks)
         );
-        return;
-      }
 
-      if (/\.apks$/i.test(fileInfo.fileName)) {
+        // If result was sent successfully, reply to SOURCE CHANNEL
+        if (resultMsg) {
+          // 2. Generate link to result message
+          const resultLink = getMessageLink(resultMsg);
+
+          // 3. Reply to original upload
+          const replyText = `<b>👍</b> <a href="${resultLink}">Check Analysis</a>`;
+
+          await safeSendMessage(bot, msg.chat.id, replyText, {
+            reply_to_message_id: msg.message_id
+          });
+        }
+
+      } catch (error) {
+        console.error("❌ Analyzer error:", error.message);
         await safeSendMessage(
           bot,
           resultChannelId,
-          buildUnsupportedBundleMessage(msg, fileInfo)
+          buildErrorMessage(msg, "Failed to analyze the APK. Please try again later.")
         );
-        return;
       }
-
-      const analysis = await analyzeApk(fileInfo);
-      const packageName = analysis.packageName;
-      const appName = analysis.appName;
-
-      if (!packageName) {
-        await safeSendMessage(bot, resultChannelId, buildErrorMessage(msg, "Package name missing in APK manifest."));
-        return;
-      }
-
-      const storeLinks = await linkExtractor(packageName);
-
-      // Send result to RESULT CHANNEL
-      const resultMsg = await safeSendMessage(
-        bot,
-        resultChannelId,
-        buildSuccessMessage(msg, fileInfo, packageName, appName, storeLinks)
-      );
-
-      // If result was sent successfully, reply to SOURCE CHANNEL
-      if (resultMsg) {
-        // 1. Get sequential number
-        const appNumber = await counterManager.getNextCounter();
-
-        // 2. Generate link to result message
-        const resultLink = getMessageLink(resultMsg);
-
-        // 3. Reply to original upload
-        const replyText = `<b>#${appNumber}</b>\n\n📊 <a href="${resultLink}">Check Analysis Request</a>`;
-
-        await safeSendMessage(bot, msg.chat.id, replyText, {
-          reply_to_message_id: msg.message_id
-        });
-      }
-
-      // console.log("✅ Message sent successfully!"); // Removed log
-      console.error("❌ Analyzer error:", error.message);
-      await safeSendMessage(
-        bot,
-        resultChannelId,
-        buildErrorMessage(msg, "Failed to analyze the APK. Please try again later.")
-      );
     } finally {
       // Delete "Analyzing APK..." message if it was sent
       if (analyzingMsg) {
