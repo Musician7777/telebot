@@ -147,3 +147,5 @@ dist
 #SSL keys
 key.pem
 crt.pem
+
+package-lock.json
