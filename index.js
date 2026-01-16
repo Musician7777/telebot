@@ -50,10 +50,6 @@ const start = async () => {
     // Wait a moment for Telegram to process the webhook deletion
     await new Promise(resolve => setTimeout(resolve, 1000));
 
-    // Initialize MTProto client for large file downloads
-    console.log('Initializing MTProto client...');
-    const mtprotoClient = await initMTProtoClient(apiId, apiHash);
-
     // Set up error handler before starting polling
     bot.on('polling_error', (error) => {
       console.error('Polling error:', error?.response?.body ?? error.message);
@@ -63,10 +59,27 @@ const start = async () => {
     console.log('Starting bot polling...');
     await bot.startPolling();
 
-    // Register the APK analyzer with MTProto client
-    registerApkAnalyzer(bot, resultChannelId, mtprotoClient);
-
     console.log('✅ Bot is up and polling for channel posts.');
+
+    // Initialize MTProto client in the background (non-blocking)
+    // This allows the bot to keep running even if MTProto is rate-limited
+    let mtprotoClient = null;
+    console.log('Initializing MTProto client...');
+    initMTProtoClient(apiId, apiHash)
+      .then((client) => {
+        mtprotoClient = client;
+        // Register the APK analyzer with MTProto client once it's ready
+        registerApkAnalyzer(bot, resultChannelId, mtprotoClient);
+        console.log('✅ MTProto client ready - large file support enabled');
+      })
+      .catch((err) => {
+        console.warn('⚠️  MTProto client initialization failed:', err.message);
+        console.warn('⚠️  Bot will continue running but large file downloads (>20MB) will not work');
+        console.warn('⚠️  If rate-limited, please wait and restart the bot later');
+        // Register analyzer without MTProto for files <20MB
+        registerApkAnalyzer(bot, resultChannelId, null);
+      });
+
   } catch (err) {
     console.error('❌ Failed to start bot:', err.message);
     process.exit(1);

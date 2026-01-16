@@ -85,8 +85,8 @@ const registerApkAnalyzer = (bot, resultChannelId, mtprotoClient) => {
         const storeLinks = await linkExtractor(packageName);
 
         // Add to Google Sheets Backup
-        const googlePlayLink = storeLinks.find(l => l.label.toLowerCase().includes('play store'))?.url;
-        const fDroidLink = storeLinks.find(l => l.label.toLowerCase().includes('f-droid'))?.url;
+        const googlePlayLink = storeLinks.find(l => l.label.toLowerCase().includes('play'))?.url;
+        const fDroidLink = storeLinks.find(l => l.label.toLowerCase().includes('droid'))?.url;
 
         await addToSheet({
           fileName: fileInfo.fileName,
